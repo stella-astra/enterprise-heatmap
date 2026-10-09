@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>企业分布信息图</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css">
+<style>body{margin:0;background:#e2e8f0;font-family:system-ui}#sheet{position:relative;width:1920px;height:1080px;background:white}#base,#result{position:absolute;inset:0;width:1920px;height:1080px}#map{position:absolute;left:1110px;top:164px;width:762px;height:814px;border-radius:16px;overflow:hidden}#result{display:none}#download{margin:16px;padding:12px 28px;background:#17243a;color:white;border:0;border-radius:8px;font-size:18px}#download:disabled{opacity:.5}</style>
+<div id="sheet"><canvas id="base" width="1920" height="1080"></canvas><div id="map"></div><img id="result" alt="16:9企业分布信息图"></div><button id="download" disabled>地图加载中…</button>
+<script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script><script>
+const P=__PAYLOAD__,S=P.summary,c=document.getElementById('base'),ctx=c.getContext('2d');
+function text(t,x,y,size=22,color='#17243a',bold=false){ctx.fillStyle=color;ctx.font=`${bold?700:400} ${size}px system-ui`;ctx.fillText(t,x,y)}
+function wrap(t,x,y,w,size=24,color='#17243a'){let line='',yy=y;ctx.font=`400 ${size}px system-ui`;for(const ch of t){if(ctx.measureText(line+ch).width>w){text(line,x,yy,size,color);line='';yy+=size*1.4}line+=ch}text(line,x,yy,size,color);return yy+size*1.4}
+ctx.fillStyle='#f4f6f8';ctx.fillRect(0,0,1920,1080);
+ctx.fillStyle='#edf3fb';ctx.fillRect(0,0,1920,128);
+ctx.fillStyle='#4d8bea';ctx.fillRect(48,34,6,51);
+text(P.meta.title,78,78,44,'#17243a',true);
+text(S.region.split('/').slice(-3).join(' / '),80,111,18,'#607584');
+
+ctx.fillStyle='#fff';ctx.fillRect(48,164,1014,814);
+const metrics=[['企业总数',S.total],['国高企业',S.hightech],['专精特新企业',S.specialized],['专精特新小巨人',S.little_giant],['上市企业',S.listed_total]];
+metrics.forEach((m,i)=>{const x=76+i*197;text(m[0],x,211,20,'#607584');text(String(m[1]),x,286,i===0?70:54,i===0?'#112c40':'#377bd6',true);if(i>0){ctx.strokeStyle='#e6ecef';ctx.beginPath();ctx.moveTo(x-23,199);ctx.lineTo(x-23,293);ctx.stroke();}});
+ctx.strokeStyle='#e2e8f0';ctx.beginPath();ctx.moveTo(76,328);ctx.lineTo(1034,328);ctx.stroke();
+text('代表企业',76,378,29,'#17243a',true);
+// 名称与短标签同一行；数据依据和选择规则保留在审计中。
+let yy=430;
+for(const r of S.representatives.slice(0,12)){
+ ctx.fillStyle='#f5f8fa';ctx.fillRect(70,yy-27,968,43);
+ let size=22;ctx.font=`400 ${size}px system-ui`;while(ctx.measureText(r.name).width>542&&size>16){size--;ctx.font=`400 ${size}px system-ui`}
+ text(r.name,82,yy,size);let xx=642;
+ for(const tag of r.tags.slice(0,3)){ctx.font='400 16px system-ui';const w=ctx.measureText(tag).width+18;ctx.fillStyle=tag==='上市企业'?'#edf4ff':tag==='独角兽'?'#eef2ff':'#edf4ff';ctx.fillRect(xx,yy-22,w,29);text(tag,xx+9,yy-2,16,tag==='上市企业'?'#3775bd':tag==='独角兽'?'#6279b5':'#3775bd');xx+=w+7}
+ yy+=45;
+}
+// 热力强弱是同一张地图的相对位置集聚，不等于产业实力。
+text('企业位置集聚',1110,1019,21,'#17243a',true);const grad=ctx.createLinearGradient(1314,0,1550,0);[['0','#6ee7f9'],['0.35','#51d779'],['0.65','#facc15'],['1','#ef4444']].forEach(v=>grad.addColorStop(+v[0],v[1]));ctx.fillStyle=grad;ctx.fillRect(1314,1001,236,16);text('低',1283,1017,17,'#64748b');text('高',1566,1017,17,'#64748b');text('蓝线：行政范围',1660,1019,18,'#64748b');
+text('Techin ｜ '+S.fetched_at,48,1056,18,'#64748b');text('© OpenMapTiles · © OpenStreetMap contributors',1470,1056,13,'#a8a29e');
+function inside(p,r){let yes=false;for(let i=0,j=r.length-1;i<r.length;j=i++){let a=r[i],b=r[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])yes=!yes}return yes}
+const polys=P.boundary.features.flatMap(f=>f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates),all=polys.flatMap(p=>p[0]),bounds=[[Math.min(...all.map(p=>p[0])),Math.min(...all.map(p=>p[1]))],[Math.max(...all.map(p=>p[0])),Math.max(...all.map(p=>p[1]))]];
+const points={type:'FeatureCollection',features:P.points.features.filter(f=>polys.some(p=>inside(f.geometry.coordinates,p[0])&&!p.slice(1).some(h=>inside(f.geometry.coordinates,h))))};
+const map=new maplibregl.Map({container:'map',style:'https://tiles.openfreemap.org/styles/liberty',interactive:false,attributionControl:false,canvasContextAttributes:{preserveDrawingBuffer:true}});
+map.on('load',()=>{map.addSource('points',{type:'geojson',data:points});map.addLayer({id:'heat',type:'heatmap',source:'points',paint:{'heatmap-radius':24,'heatmap-opacity':.7,'heatmap-color':['interpolate',['linear'],['heatmap-density'],0,'rgba(110,231,249,0)',.15,'#6ee7f9',.4,'#51d779',.65,'#facc15',1,'#ef4444']}});map.addSource('mask',{type:'geojson',data:{type:'Feature',geometry:{type:'MultiPolygon',coordinates:[[[[-180,-80],[180,-80],[180,80],[-180,80],[-180,-80]],...polys.map(p=>p[0])],...polys.flatMap(p=>p.slice(1).map(h=>[h]))]}}});map.addLayer({id:'mask',type:'fill',source:'mask',paint:{'fill-color':'#e2e8f0','fill-opacity':.48}});map.addSource('boundary',{type:'geojson',data:P.boundary});map.addLayer({id:'boundary',type:'line',source:'boundary',paint:{'line-color':'#2563eb','line-width':2.5}});map.fitBounds(bounds,{padding:24,duration:0});map.once('idle',()=>{document.getElementById('download').disabled=false;document.getElementById('download').textContent='导出 PNG · 1920 × 1080'});});
+let failed=false;map.on('error',()=>{failed=true;document.getElementById('download').disabled=true;document.getElementById('download').textContent='底图加载失败，请刷新重试'});
+document.getElementById('download').onclick=()=>{if(failed)return;const output=document.createElement('canvas');output.width=1920;output.height=1080;const x=output.getContext('2d');x.drawImage(c,0,0);x.drawImage(map.getCanvas(),1110,164,762,814);const url=output.toDataURL('image/png');const img=document.getElementById('result');img.src=url;img.style.display='block';document.getElementById('map').style.visibility='hidden';const a=document.createElement('a');a.download=P.meta.title+'.png';a.href=url;a.click();};
+</script></html>
